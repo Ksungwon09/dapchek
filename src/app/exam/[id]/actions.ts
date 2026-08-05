@@ -74,7 +74,7 @@ export async function submitExamAttempt(examId: string, rawInput: string, custom
     
     await prisma.examAttempt.update({
       where: { id: existingAttempt.id },
-      data: { revisions: [...revisions, newRevision] }
+      data: { revisions: [...revisions, newRevision as any] }
     })
     attemptId = existingAttempt.id
   } else {
@@ -82,7 +82,7 @@ export async function submitExamAttempt(examId: string, rawInput: string, custom
       data: {
         userId: session.user.id,
         examId,
-        revisions: [newRevision]
+        revisions: [newRevision as any]
       }
     })
     attemptId = attempt.id
