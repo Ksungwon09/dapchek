@@ -10,8 +10,12 @@ export default function ResultClient({ attempt, latestRevision, baseUrl }: { att
   const router = useRouter()
   const resultRef = useRef<HTMLDivElement>(null)
   
-  const round = latestRevision.round || 1
-  const parsedAnswers = latestRevision.parsed_answers || { objective: [], subjective: [] }
+  const revisions = attempt.revisions as any[]
+  const [selectedRound, setSelectedRound] = useState(latestRevision.round || 1)
+  const currentRevision = revisions.find((r: any) => r.round === selectedRound) || latestRevision
+  
+  const round = currentRevision.round || 1
+  const parsedAnswers = currentRevision.parsed_answers || { objective: [], subjective: [] }
   const answerKey = attempt.exam.answer_key as any
   const correctObj = answerKey.answers?.objective || []
   const correctSub = answerKey.answers?.subjective || []
@@ -19,9 +23,12 @@ export default function ResultClient({ attempt, latestRevision, baseUrl }: { att
   const objectiveCount = answerKey.objectiveCount || 0
   const subjectiveCount = answerKey.subjectiveCount || 0
 
-  const initialGrading = latestRevision.grading || {}
-  const [grading, setGrading] = useState<Record<string, "O" | "X">>(initialGrading)
+  const [grading, setGrading] = useState<Record<string, "O" | "X">>(currentRevision.grading || {})
   const [isSaving, setIsSaving] = useState(false)
+
+  React.useEffect(() => {
+    setGrading(currentRevision.grading || {})
+  }, [selectedRound, currentRevision])
 
   const handleMark = (qNum: string, mark: "O" | "X") => {
     setGrading(prev => ({ ...prev, [qNum]: mark }))
@@ -33,15 +40,23 @@ export default function ResultClient({ attempt, latestRevision, baseUrl }: { att
     const objNums = answerKey.objectiveNumbers || Array.from({ length: objectiveCount }).map((_, i) => i + 1)
     const subjNums = answerKey.subjectiveNumbers || Array.from({ length: subjectiveCount }).map((_, i) => objectiveCount + i + 1)
     
+    let isAllMarked = true
+    
     objNums.forEach((num: number) => {
+      if (grading[num.toString()] !== mark) isAllMarked = false
       newGrading[num.toString()] = mark
     })
     
     subjNums.forEach((num: number) => {
+      if (grading[num.toString()] !== mark) isAllMarked = false
       newGrading[num.toString()] = mark
     })
     
-    setGrading(newGrading)
+    if (isAllMarked) {
+      setGrading({})
+    } else {
+      setGrading(newGrading)
+    }
   }
 
   const handleSave = async () => {
@@ -111,13 +126,31 @@ export default function ResultClient({ attempt, latestRevision, baseUrl }: { att
 
   return (
     <div className="flex flex-col flex-1 w-full max-w-2xl mx-auto h-full p-6 relative pb-20">
-      <div className="mt-4">
+      {revisions.length > 1 && (
+        <div className="flex flex-wrap gap-2 mb-2 pb-2">
+          {revisions.map((rev: any) => (
+            <button
+              key={rev.round}
+              onClick={() => setSelectedRound(rev.round)}
+              className={`px-4 py-2 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+                selectedRound === rev.round 
+                  ? 'bg-blue-600 text-white shadow-md' 
+                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              }`}
+            >
+              {rev.round}회차
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-2">
         <div 
           ref={resultRef}
           className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-100 p-8 flex flex-col items-center text-center"
         >
           <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-lg mb-4 title-container">{attempt.exam.subject} 영역</span>
-          <h1 className="text-xl font-bold text-gray-800 mb-6 break-keep title-container">{latestRevision.customTitle || attempt.exam.title}</h1>
+          <h1 className="text-xl font-bold text-gray-800 mb-6 break-keep title-container">{currentRevision.customTitle || attempt.exam.title}</h1>
           
           <div className="flex items-end justify-center gap-1 mb-2 score-container">
             <span className="text-7xl font-black text-blue-600 tracking-tighter">{correctCount}</span>
@@ -176,14 +209,20 @@ export default function ResultClient({ attempt, latestRevision, baseUrl }: { att
       </div>
 
       <div className="mt-4 pb-10 flex flex-col gap-3">
-        {totalQuestions - correctCount > 0 && isFullyGraded && (
+        {totalQuestions - correctCount > 0 && isFullyGraded && selectedRound === revisions[revisions.length - 1].round && (
           <Link 
-            href={`/exam/${attempt.exam.id}`}
+            href={`/exam/${attempt.exam.id}?retryAttemptId=${attempt.id}&retryRound=${selectedRound}`}
             className="w-full flex items-center justify-center bg-gray-800 text-white font-bold text-lg py-4 rounded-2xl shadow-md hover:bg-black active:scale-95 transition-all"
           >
-            틀린 문제만 다시 풀기 ({round + 1}회차 시작)
+            틀린 문제만 다시 풀기 ({revisions.length + 1}회차 시작)
           </Link>
         )}
+        <Link 
+          href={`/exam/${attempt.exam.id}?editAttemptId=${attempt.id}&editRound=${selectedRound}`}
+          className="w-full flex items-center justify-center bg-blue-100 text-blue-700 font-bold text-lg py-4 rounded-2xl hover:bg-blue-200 active:scale-95 transition-all"
+        >
+          오입력 수정하기 ({selectedRound}회차)
+        </Link>
         <Link 
           href="/"
           className="w-full flex items-center justify-center bg-gray-100 text-gray-600 font-bold text-lg py-4 rounded-2xl hover:bg-gray-200 active:scale-95 transition-all"

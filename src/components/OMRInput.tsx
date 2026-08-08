@@ -10,14 +10,21 @@ interface OMRInputProps {
   subjectiveCount: number
   objectiveNumbers?: number[]
   subjectiveNumbers?: number[]
+  lockedObjectives?: boolean[]
+  lockedSubjectives?: boolean[]
 }
 
-export default function OMRInput({ value, onChange, disabled, objectiveCount, subjectiveCount, objectiveNumbers, subjectiveNumbers }: OMRInputProps) {
+export default function OMRInput({ 
+  value, onChange, disabled, objectiveCount, subjectiveCount, 
+  objectiveNumbers, subjectiveNumbers, lockedObjectives, lockedSubjectives 
+}: OMRInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Fallbacks if numbers aren't provided
   const objNums = objectiveNumbers || Array.from({ length: objectiveCount }).map((_, i) => i + 1)
   const subjNums = subjectiveNumbers || Array.from({ length: subjectiveCount }).map((_, i) => objectiveCount + i + 1)
+
+  const isAnyLocked = (lockedObjectives?.some(l => l) || lockedSubjectives?.some(l => l))
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/,/g, ".")
@@ -73,6 +80,7 @@ export default function OMRInput({ value, onChange, disabled, objectiveCount, su
   }
 
   const handleObjectiveGridChange = (index: number, newChar: string) => {
+    if (lockedObjectives?.[index]) return;
     const safeChar = newChar.replace(/[^0-9 ]/g, "").slice(-1)
     const newObjs = [...parsedObjectives]
     while (newObjs.length <= index) newObjs.push(" ")
@@ -81,6 +89,7 @@ export default function OMRInput({ value, onChange, disabled, objectiveCount, su
   }
 
   const handleSubjectiveGridChange = (index: number, newStr: string) => {
+    if (lockedSubjectives?.[index]) return;
     const safeStr = newStr.replace(/[^0-9 ]/g, "").slice(0, 3) 
     const newSubjs = [...parsedSubjectives]
     while (newSubjs.length <= index) newSubjs.push(" ")
@@ -99,13 +108,15 @@ export default function OMRInput({ value, onChange, disabled, objectiveCount, su
           value={value}
           onChange={handleChange}
           onFocus={handleFocus}
-          disabled={disabled}
-          placeholder="객관식(연속) . 주관식(.)"
-          className="w-full h-14 text-2xl tracking-[0.2em] text-center bg-gray-50 border-2 border-blue-400 rounded-xl focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 transition-all font-mono shadow-inner disabled:bg-gray-200 disabled:border-gray-300"
+          disabled={disabled || isAnyLocked}
+          placeholder={isAnyLocked ? "재풀이 시에는 아래 그리드를 이용해주세요" : "객관식(연속) . 주관식(.)"}
+          className="w-full h-14 text-2xl tracking-[0.2em] text-center bg-gray-50 border-2 border-blue-400 rounded-xl focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-100 transition-all font-mono shadow-inner disabled:bg-gray-200 disabled:border-gray-300 disabled:text-gray-400 disabled:tracking-normal"
         />
-        <p className="text-center text-xs text-gray-500 mt-2">
-          예: 1번 3, 2번 4 ➔ 34 / 주관식 구분은 마침표(.)
-        </p>
+        {!isAnyLocked && (
+          <p className="text-center text-xs text-gray-500 mt-2">
+            예: 1번 3, 2번 4 ➔ 34 / 주관식 구분은 마침표(.)
+          </p>
+        )}
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
@@ -117,16 +128,21 @@ export default function OMRInput({ value, onChange, disabled, objectiveCount, su
             <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
               {Array.from({ length: objectiveCount }).map((_, i) => {
                 const ans = parsedObjectives[i] || ""
+                const isLocked = lockedObjectives?.[i]
+                const baseClass = isLocked 
+                  ? 'bg-gray-100 border-gray-300 opacity-70' 
+                  : ans ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+                
                 return (
-                  <div key={`obj-${i}`} className={`flex flex-col items-center justify-center p-1 rounded-lg border focus-within:ring-2 focus-within:ring-blue-400 ${ans ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <div key={`obj-${i}`} className={`flex flex-col items-center justify-center p-1 rounded-lg border focus-within:ring-2 focus-within:ring-blue-400 ${baseClass}`}>
                     <span className="text-[10px] font-bold text-gray-500 mb-0.5">{objNums[i]}</span>
                     <input 
                       type="text" 
                       inputMode="numeric"
                       value={ans}
                       onChange={(e) => handleObjectiveGridChange(i, e.target.value)}
-                      disabled={disabled}
-                      className={`w-full text-center font-mono font-bold text-lg bg-transparent outline-none ${ans ? 'text-blue-700' : 'text-gray-400'}`}
+                      disabled={disabled || isLocked}
+                      className={`w-full text-center font-mono font-bold text-lg bg-transparent outline-none ${isLocked ? 'text-gray-500' : ans ? 'text-blue-700' : 'text-gray-400'}`}
                     />
                   </div>
                 )
@@ -141,16 +157,21 @@ export default function OMRInput({ value, onChange, disabled, objectiveCount, su
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {Array.from({ length: subjectiveCount }).map((_, i) => {
                 const ans = parsedSubjectives[i] || ""
+                const isLocked = lockedSubjectives?.[i]
+                const baseClass = isLocked 
+                  ? 'bg-gray-100 border-gray-300 opacity-70' 
+                  : ans ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+
                 return (
-                  <div key={`subj-${i}`} className={`flex flex-col items-center justify-center p-1 rounded-lg border focus-within:ring-2 focus-within:ring-green-400 ${ans ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <div key={`subj-${i}`} className={`flex flex-col items-center justify-center p-1 rounded-lg border focus-within:ring-2 focus-within:ring-green-400 ${baseClass}`}>
                     <span className="text-[10px] font-bold text-gray-500 mb-0.5">{subjNums[i]}</span>
                     <input 
                       type="text" 
                       inputMode="numeric"
                       value={ans}
                       onChange={(e) => handleSubjectiveGridChange(i, e.target.value)}
-                      disabled={disabled}
-                      className={`w-full text-center font-mono font-bold text-lg bg-transparent outline-none ${ans ? 'text-green-700' : 'text-gray-400'}`}
+                      disabled={disabled || isLocked}
+                      className={`w-full text-center font-mono font-bold text-lg bg-transparent outline-none ${isLocked ? 'text-gray-500' : ans ? 'text-green-700' : 'text-gray-400'}`}
                     />
                   </div>
                 )

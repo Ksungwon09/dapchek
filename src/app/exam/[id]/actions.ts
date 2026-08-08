@@ -4,7 +4,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { parseAnswers } from "@/lib/parser"
 
-export async function submitExamAttempt(examId: string, rawInput: string, customTitle?: string) {
+export async function submitExamAttempt(examId: string, rawInput: string, customTitle?: string, editRound?: number, retryFromRound?: number) {
   const session = await auth()
   if (!session?.user?.id) throw new Error("로그인이 필요합니다.")
 
@@ -48,6 +48,27 @@ export async function submitExamAttempt(examId: string, rawInput: string, custom
     }
   }
 
+  // 기존 시도가 있는지 확인 (N회차 처리) - 샘플(프리셋)은 항상 새로 생성하도록 isSample 확인
+  let existingAttempt = null;
+  if (!(exam as any).isSample) {
+    existingAttempt = await prisma.examAttempt.findFirst({
+      where: { userId: session.user.id, examId },
+    })
+  }
+
+  // 다시 풀기 시, 이전 회차에서 맞춘 문제의 채점 결과(O) 병합
+  if (retryFromRound && existingAttempt) {
+    const revisions = existingAttempt.revisions as any[]
+    const prevRev = revisions.find(r => r.round === retryFromRound)
+    if (prevRev && prevRev.grading) {
+      for (const [qNum, mark] of Object.entries(prevRev.grading)) {
+        if (mark === "O") {
+          grading[qNum] = "O"
+        }
+      }
+    }
+  }
+
   // 채점 데이터 저장
   const newRevision = {
     round: 1,
@@ -58,18 +79,29 @@ export async function submitExamAttempt(examId: string, rawInput: string, custom
     submitted_at: new Date().toISOString()
   }
 
-  // 기존 시도가 있는지 확인 (N회차 처리) - 샘플(프리셋)은 항상 새로 생성하도록 isSample 확인
-  let existingAttempt = null;
-  if (!(exam as any).isSample) {
-    existingAttempt = await prisma.examAttempt.findFirst({
-      where: { userId: session.user.id, examId },
-    })
-  }
-
   let attemptId = ""
 
   if (existingAttempt) {
     const revisions = existingAttempt.revisions as any[]
+    
+    // 오입력 수정 (현재 회차 덮어쓰기)
+    if (editRound) {
+      const targetIndex = revisions.findIndex(r => r.round === editRound)
+      if (targetIndex !== -1) {
+        newRevision.round = editRound
+        const prevGrading = revisions[targetIndex].grading || {}
+        newRevision.grading = { ...prevGrading, ...grading }
+        
+        revisions[targetIndex] = newRevision as any
+        
+        await prisma.examAttempt.update({
+          where: { id: existingAttempt.id },
+          data: { revisions }
+        })
+        return existingAttempt.id
+      }
+    }
+    
     newRevision.round = revisions.length + 1
     
     await prisma.examAttempt.update({

@@ -7,9 +7,11 @@ import { useExamStore } from "@/store/useExamStore"
 import { submitExamAttempt } from "./actions"
 
 export default function ExamClient({ 
-  examId, examTitle, examSubject, objectiveCount, subjectiveCount, hasAnswerKey, objectiveNumbers, subjectiveNumbers 
+  examId, examTitle, examSubject, objectiveCount, subjectiveCount, hasAnswerKey, objectiveNumbers, subjectiveNumbers,
+  initialValue, lockedObjectives, lockedSubjectives, editAttemptId, editRound, retryAttemptId, retryRound
 }: { 
-  examId: string, examTitle: string, examSubject: string, objectiveCount: number, subjectiveCount: number, hasAnswerKey?: boolean, objectiveNumbers?: number[], subjectiveNumbers?: number[] 
+  examId: string, examTitle: string, examSubject: string, objectiveCount: number, subjectiveCount: number, hasAnswerKey?: boolean, objectiveNumbers?: number[], subjectiveNumbers?: number[],
+  initialValue?: string, lockedObjectives?: boolean[], lockedSubjectives?: boolean[], editAttemptId?: string, editRound?: number, retryAttemptId?: string, retryRound?: number
 }) {
   const router = useRouter()
   const [value, setValue] = useState("")
@@ -22,10 +24,12 @@ export default function ExamClient({
   const clearDraftAnswer = useExamStore((state) => state.clearDraftAnswer)
 
   useEffect(() => {
-    if (draftAnswers[examId]) {
+    if (editAttemptId || retryAttemptId) {
+      setValue(initialValue || "")
+    } else if (draftAnswers[examId]) {
       setValue(draftAnswers[examId])
     }
-  }, [examId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [examId, editAttemptId, retryAttemptId, initialValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleChange = (val: string) => {
     setValue(val)
@@ -43,7 +47,7 @@ export default function ExamClient({
     setError("")
 
     try {
-      const attemptId = await submitExamAttempt(examId, value, customTitle)
+      const attemptId = await submitExamAttempt(examId, value, customTitle, editRound, retryRound)
       clearDraftAnswer(examId)
       router.push(`/result/${attemptId}`)
     } catch (err: any) {
@@ -79,6 +83,8 @@ export default function ExamClient({
           subjectiveCount={subjectiveCount} 
           objectiveNumbers={objectiveNumbers}
           subjectiveNumbers={subjectiveNumbers}
+          lockedObjectives={lockedObjectives}
+          lockedSubjectives={lockedSubjectives}
         />
         {error && (
           <p className="text-red-600 font-bold text-sm mt-6 text-center bg-red-50 p-4 rounded-xl border border-red-100">{error}</p>
